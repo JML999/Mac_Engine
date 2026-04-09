@@ -152,6 +152,16 @@
         game.fillBox(9, 4, 4, 11, 4, 5, 'cobblestone');
         game.fillBox(9, 5, 8, 11, 5, 9, 'gold');
 
+        // Moving platforms - the core obby mechanic!
+        // Horizontal slider between platform gaps
+        game.addMovingPlatform(6, 3, 3, 12, 3, 3, { block: 'planks', speed: 3, width: 2, depth: 2 });
+
+        // Vertical elevator
+        game.addMovingPlatform(20, 2, 0, 20, 8, 0, { block: 'iron', speed: 2, width: 2, depth: 2, pauseTime: 1 });
+
+        // Diagonal rising path
+        game.addMovingPlatform(15, 5, -5, 22, 9, -5, { block: 'gold', speed: 1.5, width: 3, depth: 2 });
+
         // Finish platform
         game.fillBox(27, 10, -2, 31, 10, 2, 'gold');
         game.fillBox(28, 11, -1, 30, 11, 1, 'gold');

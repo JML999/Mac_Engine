@@ -33,6 +33,11 @@ export class PlayerController {
   private mode: 'first-person' | 'third-person';
   private thirdPersonOffset = new THREE.Vector3(0, 6, 12);
   private running = false;
+  private jumpPressed = false;
+  /** Platform the player is currently riding */
+  private _platformDeltaX = 0;
+  private _platformDeltaZ = 0;
+  private _onPlatform = false;
 
   constructor(
     body: RAPIER.RigidBody,
@@ -101,13 +106,26 @@ export class PlayerController {
     }
 
     // Apply horizontal velocity, preserve vertical
+    // If on a moving platform, add its per-frame displacement as velocity
     const vel = this.body.linvel();
-    this.body.setLinvel({ x: move.x, y: vel.y, z: move.z }, true);
-
-    // Jump
-    if ((this.keys.has('space')) && this.physics.isOnGround(this.body)) {
-      this.body.setLinvel({ x: vel.x, y: this.jumpForce, z: vel.z }, true);
+    let finalX = move.x;
+    let finalZ = move.z;
+    if (this._onPlatform) {
+      // Convert per-frame delta to velocity (multiply by 60 since physics runs at 60hz)
+      finalX += this._platformDeltaX * 60;
+      finalZ += this._platformDeltaZ * 60;
+      this._onPlatform = false;
+      this._platformDeltaX = 0;
+      this._platformDeltaZ = 0;
     }
+    this.body.setLinvel({ x: finalX, y: vel.y, z: finalZ }, true);
+
+    // Jump - only on initial press, not while held
+    const spaceDown = this.keys.has('space');
+    if (spaceDown && !this.jumpPressed && this.physics.isOnGround(this.body)) {
+      this.body.setLinvel({ x: finalX, y: this.jumpForce, z: finalZ }, true);
+    }
+    this.jumpPressed = spaceDown;
 
     // Update camera
     const playerPos = this.body.translation();
@@ -140,6 +158,17 @@ export class PlayerController {
   getPosition(): { x: number; y: number; z: number } {
     const t = this.body.translation();
     return { x: t.x, y: t.y, z: t.z };
+  }
+
+  getBody(): RAPIER.RigidBody {
+    return this.body;
+  }
+
+  /** Called each frame when player is standing on a moving platform */
+  setPlatformDelta(dx: number, dz: number): void {
+    this._onPlatform = true;
+    this._platformDeltaX = dx;
+    this._platformDeltaZ = dz;
   }
 
   setPosition(x: number, y: number, z: number): void {

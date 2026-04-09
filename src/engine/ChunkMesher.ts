@@ -113,11 +113,13 @@ export function buildChunkMesh(
               uvs.push(vert.uv[0], vert.uv[1]);
             }
 
-            // Hytopia's vertex color: (baseColor - ao) * faceShade * skyLight
+            // Vertex color = baseColor * (1 - aoIntensity) * faceShade * skyLight
+            // AO intensity [0, 0.5, 0.7, 0.9] = how much to darken at 0,1,2,3 solid neighbors
             const ao = calculateAO(world, wx, wy, wz, vert.ao);
-            const r = Math.max(0, (baseColor[0] - ao)) * faceShade * skyLight;
-            const g = Math.max(0, (baseColor[1] - ao)) * faceShade * skyLight;
-            const b = Math.max(0, (baseColor[2] - ao)) * faceShade * skyLight;
+            const shade = (1 - ao) * faceShade * skyLight;
+            const r = baseColor[0] * shade;
+            const g = baseColor[1] * shade;
+            const b = baseColor[2] * shade;
             colors.push(r, g, b, 1.0);
           }
 

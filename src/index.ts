@@ -11,6 +11,7 @@ export { PhysicsEngine } from './engine/Physics';
 export { PlayerController, type PlayerOptions } from './engine/PlayerController';
 export { TextureAtlas } from './engine/TextureAtlas';
 export { voxelRaycast, type RaycastHit } from './engine/VoxelRaycast';
+export { MovingPlatform, type PlatformOptions } from './engine/MovingPlatform';
 
 // For IIFE/CDN: attach VoxelCraft constructor directly to window
 if (typeof window !== 'undefined') {

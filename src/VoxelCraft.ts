@@ -5,6 +5,7 @@ import { VoxelRenderer } from './engine/Renderer';
 import { PhysicsEngine } from './engine/Physics';
 import { PlayerController, PlayerOptions } from './engine/PlayerController';
 import { voxelRaycast, RaycastHit } from './engine/VoxelRaycast';
+import { MovingPlatform, PlatformOptions } from './engine/MovingPlatform';
 
 export interface VoxelCraftOptions {
   fov?: number;
@@ -27,6 +28,7 @@ export class VoxelCraft {
   private onTickCallbacks: ((dt: number) => void)[] = [];
   private saveKey: string | null = null;
   private autoSaveInterval: number | null = null;
+  private platforms: MovingPlatform[] = [];
 
   score = 0;
 
@@ -166,11 +168,29 @@ export class VoxelCraft {
       const dt = Math.min((time - lastTime) / 1000, 0.05); // Cap at 50ms
       lastTime = time;
 
-      this.physics.step(1 / 60);
+      // Update moving platforms
+      for (const platform of this.platforms) {
+        platform.update(dt);
+      }
 
+      // Detect if player is on a platform BEFORE physics
+      if (this.player && this.platforms.length > 0) {
+        const pos = this.player.getPosition();
+        for (const platform of this.platforms) {
+          if (platform.isPointAbove(pos.x, pos.y, pos.z)) {
+            this.player.setPlatformDelta(platform.deltaX, platform.deltaZ);
+            break;
+          }
+        }
+      }
+
+      // Player update sets velocity (WASD + platform delta)
       if (this.player) {
         this.player.update();
       }
+
+      // Physics step applies the velocity
+      this.physics.step(1 / 60);
 
       for (const cb of this.onTickCallbacks) {
         cb(dt);
@@ -184,6 +204,29 @@ export class VoxelCraft {
 
   stop(): void {
     this.running = false;
+  }
+
+  // --- Moving platforms ---
+
+  addMovingPlatform(
+    x1: number, y1: number, z1: number,
+    x2: number, y2: number, z2: number,
+    opts?: PlatformOptions
+  ): this {
+    // Platforms are created after start() since they need the scene and atlas
+    this.initPromise.then(() => {
+      const platform = new MovingPlatform(
+        this.renderer.scene,
+        this.physics,
+        this.registry,
+        this.registry.atlas,
+        x1, y1, z1,
+        x2, y2, z2,
+        opts
+      );
+      this.platforms.push(platform);
+    });
+    return this;
   }
 
   // --- Raycasting (for block placement/removal) ---

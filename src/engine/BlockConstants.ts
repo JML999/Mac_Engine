@@ -28,7 +28,9 @@ export const FACE_SHADE_SIDE = 0.8;
 export const FACE_SHADE_BOTTOM = 0.5;
 
 // AO intensity curve: [0 neighbors, 1 neighbor, 2 neighbors, 3 neighbors]
-export const DEFAULT_BLOCK_AO_INTENSITY: Vector4Tuple = [0, 0.5, 0.7, 0.9];
+// Hytopia's values are [0, 0.5, 0.7, 0.9] but those are subtracted from the color
+// before multiplication. For our (1 - ao) multiplier approach, use softer values.
+export const DEFAULT_BLOCK_AO_INTENSITY: Vector4Tuple = [0, 0.15, 0.3, 0.45];
 
 // Sky light configuration
 export const SKY_LIGHT_MAX_DISTANCE = 16;
