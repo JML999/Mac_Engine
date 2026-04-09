@@ -14,6 +14,11 @@ export interface BlockType {
   textureTop?: string;     // +Y face
   textureBottom?: string;  // -Y face
   textureSide?: string;    // +/-X, +/-Z faces
+  // Block behaviors (obby mechanics)
+  isSlippery?: boolean;    // Ice - player slides with momentum
+  isDeadly?: boolean;      // Lava/spikes - kills player on touch
+  bounceForce?: number;    // Bounce pad - launches player upward
+  speedMultiplier?: number; // Speed boost/slow zone
 }
 
 const BASE = '/textures/blocks';
@@ -29,15 +34,15 @@ const DEFAULT_BLOCKS: BlockType[] = [
   { id: 5, name: 'wood', color: [0.55, 0.36, 0.20],
     textureTop: `${BASE}/oak-log/+y.png`, textureBottom: `${BASE}/oak-log/-y.png`, textureSide: `${BASE}/oak-log/+x.png`,
     topColor: [0.50, 0.40, 0.25], solid: true },
-  { id: 6, name: 'leaves', color: [0.22, 0.50, 0.18], textureAll: `${BASE}/leaves.png`, solid: true, alphaTest: true },
+  { id: 6, name: 'ice', color: [0.70, 0.85, 0.95], textureAll: `${BASE}/ice.png`, solid: true, isSlippery: true },
   { id: 7, name: 'water', color: [0.20, 0.40, 0.80], textureAll: `${BASE}/water.png`, transparent: true, solid: false },
   { id: 8, name: 'brick', color: [0.65, 0.30, 0.25], textureAll: `${BASE}/bricks.png`, solid: true },
   { id: 9, name: 'cobblestone', color: [0.42, 0.42, 0.42], textureAll: `${BASE}/cobblestone.png`, solid: true },
   { id: 10, name: 'snow', color: [0.95, 0.95, 0.98], textureAll: `${BASE}/snow.png`, solid: true },
   { id: 11, name: 'glass', color: [0.75, 0.85, 0.95], textureAll: `${BASE}/glass.png`, transparent: true, solid: true, alphaTest: true },
-  { id: 12, name: 'lava', color: [0.90, 0.35, 0.05], textureAll: `${BASE}/lava.png`, solid: false },
+  { id: 12, name: 'lava', color: [0.90, 0.35, 0.05], textureAll: `${BASE}/lava.png`, solid: true, isDeadly: true },
   { id: 13, name: 'gold', color: [0.90, 0.75, 0.20], textureAll: `${BASE}/gold.png`, solid: true },
-  { id: 14, name: 'iron', color: [0.70, 0.68, 0.65], textureAll: `${BASE}/iron.png`, solid: true },
+  { id: 14, name: 'bounce', color: [0.20, 0.80, 0.30], textureAll: `${BASE}/bounce.png`, solid: true, bounceForce: 20 },
   { id: 15, name: 'planks', color: [0.70, 0.55, 0.30], textureAll: `${BASE}/planks.png`, solid: true },
 ];
 

@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PhysicsEngine } from './Physics';
+import { VoxelWorld } from './World';
+import { BlockType } from './BlockRegistry';
 
 // Hytopia's exact movement constants from DefaultPlayerEntityController.ts
 const HYTOPIA_WALK_VELOCITY = 4;
 const HYTOPIA_RUN_VELOCITY = 8;
 const HYTOPIA_JUMP_VELOCITY = 10;
+
+// Ice physics from obby_lobby ObbyPlayerController.ts
+const ICE_ACCELERATION = 0.1;
+const ICE_DECELERATION = 0.95;
 
 export interface PlayerOptions {
   speed?: number;
@@ -34,6 +40,19 @@ export class PlayerController {
   private thirdPersonOffset = new THREE.Vector3(0, 6, 12);
   private running = false;
   private jumpPressed = false;
+  private world: VoxelWorld | null = null;
+  // Ice skating physics (ported from obby_lobby)
+  private iceVelocity = { x: 0, z: 0 };
+  private onIce = false;
+  // Track our own horizontal momentum (since we override setLinvel every frame)
+  private momentumX = 0;
+  private momentumZ = 0;
+  private momentumDecay = 0.85; // Preserve 85% momentum per frame when no input
+  // Block behavior callbacks
+  onDeath: (() => void) | null = null;
+  onBounce: ((force: number) => void) | null = null;
+  private _iceLogCounter = 0;
+  private _wasOnIce = false;
   /** Platform the player is currently riding */
   private _platformDeltaX = 0;
   private _platformDeltaZ = 0;
@@ -44,12 +63,14 @@ export class PlayerController {
     physics: PhysicsEngine,
     camera: THREE.PerspectiveCamera,
     canvas: HTMLCanvasElement,
-    opts: PlayerOptions = {}
+    opts: PlayerOptions = {},
+    world?: VoxelWorld,
   ) {
     this.body = body;
     this.physics = physics;
     this.camera = camera;
     this.canvas = canvas;
+    this.world = world ?? null;
     this.speed = opts.speed ?? HYTOPIA_WALK_VELOCITY;
     this.runSpeed = opts.runSpeed ?? HYTOPIA_RUN_VELOCITY;
     this.jumpForce = opts.jumpForce ?? HYTOPIA_JUMP_VELOCITY;
@@ -105,27 +126,117 @@ export class PlayerController {
       move.normalize().multiplyScalar(currentSpeed);
     }
 
-    // Apply horizontal velocity, preserve vertical
-    // If on a moving platform, add its per-frame displacement as velocity
+    // Check block below player for behaviors
+    const curPos = this.body.translation();
+    let blockBelow: BlockType | undefined;
+    if (this.world) {
+      const bx = Math.floor(curPos.x);
+      const by = Math.floor(curPos.y - 1.0);
+      const bz = Math.floor(curPos.z);
+      const blockId = this.world.getBlock(bx, by, bz);
+      if (blockId > 0) blockBelow = this.world.registry.get(blockId);
+    }
+
+    // Deadly block - trigger death callback
+    if (blockBelow?.isDeadly && this.onDeath) {
+      this.onDeath();
+      return;
+    }
+
+    // Bounce block - launch player upward, preserve horizontal momentum
+    if (blockBelow?.bounceForce && this.physics.isOnGround(this.body)) {
+      const bounceVel = this.body.linvel();
+      const hx = move.lengthSq() > 0 ? move.x * 1.5 : bounceVel.x;
+      const hz = move.lengthSq() > 0 ? move.z * 1.5 : bounceVel.z;
+      this.momentumX = hx;
+      this.momentumZ = hz;
+      this.body.setLinvel({ x: hx, y: blockBelow.bounceForce, z: hz }, true);
+      return;
+    }
+
+    // Ice physics (ported from obby_lobby ObbyPlayerController)
+    this.onIce = blockBelow?.isSlippery === true;
     const vel = this.body.linvel();
-    let finalX = move.x;
-    let finalZ = move.z;
+    let finalX: number;
+    let finalZ: number;
+
+    if (this.onIce) {
+      const targetX = move.x;
+      const targetZ = move.z;
+      if (targetX !== 0 || targetZ !== 0) {
+        this.iceVelocity.x += (targetX - this.iceVelocity.x) * ICE_ACCELERATION;
+        this.iceVelocity.z += (targetZ - this.iceVelocity.z) * ICE_ACCELERATION;
+      } else {
+        this.iceVelocity.x *= ICE_DECELERATION;
+        this.iceVelocity.z *= ICE_DECELERATION;
+      }
+      finalX = this.iceVelocity.x;
+      finalZ = this.iceVelocity.z;
+
+      if (this._iceLogCounter++ % 30 === 0) {
+        const speed = Math.sqrt(finalX * finalX + finalZ * finalZ);
+        console.log(`[ICE] vel=(${finalX.toFixed(2)}, ${finalZ.toFixed(2)}) speed=${speed.toFixed(2)} input=(${targetX.toFixed(2)}, ${targetZ.toFixed(2)}) rapierVel=(${vel.x.toFixed(2)}, ${vel.z.toFixed(2)})`);
+      }
+    } else {
+      // When NOT on ice, seed ice velocity from our tracked momentum
+      // This works for walking, jumping, and bouncing onto ice
+      this.iceVelocity.x = this.momentumX;
+      this.iceVelocity.z = this.momentumZ;
+      finalX = move.x;
+      finalZ = move.z;
+    }
+
+    // Add platform velocity
     if (this._onPlatform) {
-      // Convert per-frame delta to velocity (multiply by 60 since physics runs at 60hz)
       finalX += this._platformDeltaX * 60;
       finalZ += this._platformDeltaZ * 60;
       this._onPlatform = false;
       this._platformDeltaX = 0;
       this._platformDeltaZ = 0;
     }
-    this.body.setLinvel({ x: finalX, y: vel.y, z: finalZ }, true);
+
+    const grounded = this.physics.isOnGround(this.body);
+
+    // Track our momentum - this persists through air and onto ice
+    if (grounded) {
+      // On ground: if pressing WASD, momentum = movement. If not, decay momentum.
+      if (move.lengthSq() > 0) {
+        this.momentumX = finalX;
+        this.momentumZ = finalZ;
+      } else {
+        // Decay momentum so it persists briefly after releasing WASD
+        this.momentumX *= this.momentumDecay;
+        this.momentumZ *= this.momentumDecay;
+        // Snap to zero when very small
+        if (Math.abs(this.momentumX) < 0.1) this.momentumX = 0;
+        if (Math.abs(this.momentumZ) < 0.1) this.momentumZ = 0;
+      }
+      this.body.setLinvel({ x: finalX, y: vel.y, z: finalZ }, true);
+    } else {
+      // In air: preserve momentum, allow some air control
+      const airControl = 0.15;
+      const hasInput = move.lengthSq() > 0;
+      if (hasInput) {
+        this.momentumX += (finalX - this.momentumX) * airControl;
+        this.momentumZ += (finalZ - this.momentumZ) * airControl;
+      }
+      // Always apply momentum in air (this is what gives arcs)
+      this.body.setLinvel({ x: this.momentumX, y: vel.y, z: this.momentumZ }, true);
+    }
 
     // Jump - only on initial press, not while held
     const spaceDown = this.keys.has('space');
-    if (spaceDown && !this.jumpPressed && this.physics.isOnGround(this.body)) {
-      this.body.setLinvel({ x: finalX, y: this.jumpForce, z: finalZ }, true);
+    if (spaceDown && !this.jumpPressed && grounded) {
+      console.log(`[JUMP] momentum=(${this.momentumX.toFixed(2)}, ${this.momentumZ.toFixed(2)}) move=(${move.x.toFixed(2)}, ${move.z.toFixed(2)}) grounded=${grounded} onIce=${this.onIce}`);
+      this.body.setLinvel({ x: this.momentumX, y: this.jumpForce, z: this.momentumZ }, true);
     }
     this.jumpPressed = spaceDown;
+
+    // Log airborne state every 15 frames
+    if (!grounded && this._iceLogCounter % 15 === 0) {
+      const v = this.body.linvel();
+      console.log(`[AIR] momentum=(${this.momentumX.toFixed(2)}, ${this.momentumZ.toFixed(2)}) rapier=(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`);
+    }
 
     // Update camera
     const playerPos = this.body.translation();

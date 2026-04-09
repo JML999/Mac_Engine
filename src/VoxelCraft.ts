@@ -132,8 +132,13 @@ export class VoxelCraft {
         this.physics,
         this.renderer.camera,
         this.renderer.getCanvas(),
-        opts
+        opts,
+        this.world
       );
+      // Wire up death callback - respawn at provided coords or default
+      this.player.onDeath = () => {
+        this.respawn(opts.x ?? 0, (opts.y ?? 5), opts.z ?? 0);
+      };
     });
     return this;
   }

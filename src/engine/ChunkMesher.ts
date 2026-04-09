@@ -106,8 +106,10 @@ export function buildChunkMesh(
             normals.push(nx, ny, nz);
 
             // Map UVs through texture atlas
+            // Side faces need V flipped because flipY=false on canvas texture
             if (atlas && texKey) {
-              const [mu, mv] = atlas.mapUV(texKey, vert.uv[0], vert.uv[1]);
+              const isSide = faceName !== 'top' && faceName !== 'bottom';
+              const [mu, mv] = atlas.mapUV(texKey, vert.uv[0], vert.uv[1], isSide);
               uvs.push(mu, mv);
             } else {
               uvs.push(vert.uv[0], vert.uv[1]);

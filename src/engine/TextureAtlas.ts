@@ -117,12 +117,13 @@ export class TextureAtlas {
   }
 
   // Map a [0-1] face UV to atlas UV for a specific texture
-  mapUV(key: string, u: number, v: number): [number, number] {
+  // flipV: flip the V coordinate (needed for side faces since flipY=false on the texture)
+  mapUV(key: string, u: number, v: number, flipV = false): [number, number] {
     const entry = this.entries.get(key);
     if (!entry) return [u, v]; // fallback
-    // CanvasTexture with flipY=true handles the Y flip, so map directly
+    const fv = flipV ? (1 - v) : v;
     const mappedU = entry.u0 + u * (entry.u1 - entry.u0);
-    const mappedV = entry.v0 + v * (entry.v1 - entry.v0);
+    const mappedV = entry.v0 + fv * (entry.v1 - entry.v0);
     return [mappedU, mappedV];
   }
 }
