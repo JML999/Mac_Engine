@@ -1,8 +1,10 @@
+import * as THREE from 'three';
 import { BlockRegistry } from './engine/BlockRegistry';
 import { VoxelWorld } from './engine/World';
 import { VoxelRenderer } from './engine/Renderer';
 import { PhysicsEngine } from './engine/Physics';
 import { PlayerController, PlayerOptions } from './engine/PlayerController';
+import { voxelRaycast, RaycastHit } from './engine/VoxelRaycast';
 
 export interface VoxelCraftOptions {
   fov?: number;
@@ -182,12 +184,57 @@ export class VoxelCraft {
     this.running = false;
   }
 
+  // --- Raycasting (for block placement/removal) ---
+
+  raycast(maxDist = 8): RaycastHit | null {
+    const cam = this.renderer.camera;
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    return voxelRaycast(
+      this.world,
+      cam.position.x, cam.position.y, cam.position.z,
+      dir.x, dir.y, dir.z,
+      maxDist
+    );
+  }
+
+  // Place a block where the player is looking (on the face they're pointing at)
+  placeBlockAtCursor(block: string | number, maxDist = 8): boolean {
+    const hit = this.raycast(maxDist);
+    if (!hit) return false;
+    const id = typeof block === 'string' ? this.registry.getId(block) : block;
+    const px = hit.x + hit.nx;
+    const py = hit.y + hit.ny;
+    const pz = hit.z + hit.nz;
+    this.world.setBlock(px, py, pz, id);
+    this.renderer.rebuildChunk(this.world, px, py, pz);
+    // Also rebuild neighbor chunk if on boundary
+    if (hit.nx !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    if (hit.ny !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    if (hit.nz !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    return true;
+  }
+
+  // Remove the block the player is looking at
+  removeBlockAtCursor(maxDist = 8): boolean {
+    const hit = this.raycast(maxDist);
+    if (!hit) return false;
+    this.world.setBlock(hit.x, hit.y, hit.z, 0);
+    this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    return true;
+  }
+
   // --- Accessors ---
 
   getPlayerPosition(): { x: number; y: number; z: number } | null {
     return this.player?.getPosition() ?? null;
   }
 
+  respawn(x?: number, y?: number, z?: number): void {
+    this.player?.setPosition(x ?? 0, y ?? 5, z ?? 0);
+  }
+
+  getWorld() { return this.world; }
+  getRegistry() { return this.registry; }
   getScene() { return this.renderer.scene; }
   getCamera() { return this.renderer.camera; }
   getThree() { return import('three'); }

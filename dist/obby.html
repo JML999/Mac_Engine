@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Obby Builder</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #game { width: 100%; height: 100%; }
+
+        /* Crosshair */
+        #crosshair {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 100;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: rgba(255,255,255,0.7); border-radius: 1px;
+        }
+        #crosshair::before { width: 2px; height: 20px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+        #crosshair::after { width: 20px; height: 2px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+        /* Hotbar */
+        #hotbar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 4px; padding: 6px; background: rgba(0,0,0,0.6);
+            border-radius: 8px; z-index: 100; border: 2px solid rgba(255,255,255,0.15);
+        }
+        .hotbar-slot {
+            width: 48px; height: 48px; border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 6px; cursor: pointer; position: relative;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.05); transition: all 0.1s;
+        }
+        .hotbar-slot.active { border-color: #fff; background: rgba(255,255,255,0.15); box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        .hotbar-slot img { width: 32px; height: 32px; image-rendering: pixelated; }
+        .hotbar-slot .key {
+            position: absolute; top: 2px; left: 4px; font-size: 10px;
+            color: rgba(255,255,255,0.5); font-weight: bold;
+        }
+        .hotbar-slot .label {
+            position: absolute; bottom: -18px; font-size: 9px;
+            color: rgba(255,255,255,0.6); white-space: nowrap;
+        }
+
+        /* Mode indicator */
+        #mode-bar {
+            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+            padding: 8px 20px; background: rgba(0,0,0,0.6); border-radius: 20px;
+            color: white; font-size: 14px; z-index: 100; text-align: center;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        #mode-bar .mode { font-weight: bold; color: #4fc3f7; }
+        #mode-bar .hint { color: rgba(255,255,255,0.5); font-size: 12px; }
+
+        /* Instructions overlay */
+        #instructions {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 200;
+            display: flex; align-items: center; justify-content: center;
+            color: white;
+        }
+        #instructions .panel {
+            background: rgba(30,30,40,0.95); padding: 40px; border-radius: 16px;
+            max-width: 500px; text-align: center; border: 1px solid rgba(255,255,255,0.1);
+        }
+        #instructions h1 { margin: 0 0 10px; font-size: 28px; }
+        #instructions .subtitle { color: rgba(255,255,255,0.5); margin-bottom: 25px; }
+        #instructions .controls { text-align: left; margin: 20px 0; line-height: 2; }
+        #instructions kbd {
+            background: #333; padding: 3px 8px; border-radius: 4px;
+            border: 1px solid #555; font-family: monospace; font-size: 13px;
+        }
+        #instructions .start-btn {
+            background: #4fc3f7; color: #000; border: none; padding: 12px 40px;
+            border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+            margin-top: 15px;
+        }
+        #instructions .start-btn:hover { background: #81d4fa; }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    <div id="crosshair"></div>
+
+    <div id="mode-bar">
+        <span class="mode" id="mode-text">BUILD MODE</span><br>
+        <span class="hint">Tab to switch | Left click place | Right click remove</span>
+    </div>
+
+    <div id="hotbar"></div>
+
+    <!-- Instructions hidden, click game to start -->
+
+    <script src="voxelcraft.iife.js"></script>
+    <script>
+        // --- Block palette for the hotbar ---
+        const PALETTE = [
+            { name: 'stone', label: 'Stone', texture: 'textures/blocks/stone.png' },
+            { name: 'brick', label: 'Brick', texture: 'textures/blocks/bricks.png' },
+            { name: 'planks', label: 'Wood', texture: 'textures/blocks/planks.png' },
+            { name: 'grass', label: 'Grass', texture: 'textures/blocks/grass-block/+y.png' },
+            { name: 'sand', label: 'Sand', texture: 'textures/blocks/sand.png' },
+            { name: 'cobblestone', label: 'Cobble', texture: 'textures/blocks/cobblestone.png' },
+            { name: 'gold', label: 'Gold', texture: 'textures/blocks/gold.png' },
+            { name: 'snow', label: 'Snow', texture: 'textures/blocks/snow.png' },
+            { name: 'leaves', label: 'Leaves', texture: 'textures/blocks/leaves.png' },
+        ];
+
+        let selectedSlot = 0;
+        let buildMode = true;
+
+        // --- Build hotbar UI ---
+        const hotbar = document.getElementById('hotbar');
+        PALETTE.forEach((block, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'hotbar-slot' + (i === 0 ? ' active' : '');
+            slot.innerHTML = `
+                <span class="key">${i + 1}</span>
+                <img src="${block.texture}" alt="${block.label}">
+                <span class="label">${block.label}</span>
+            `;
+            slot.addEventListener('click', (e) => { e.stopPropagation(); selectSlot(i); });
+            hotbar.appendChild(slot);
+        });
+
+        function selectSlot(i) {
+            document.querySelectorAll('.hotbar-slot').forEach((s, idx) => {
+                s.classList.toggle('active', idx === i);
+            });
+            selectedSlot = i;
+        }
+
+        // --- Create game ---
+        // Access from IIFE namespace
+        const VC = VoxelCraft.VoxelCraft || VoxelCraft;
+        const game = new VC('#game');
+
+        // Starter obby layout
+        game.flatWorld(50, 'grass', 3);
+
+        // Starting platform
+        game.fillBox(-2, 1, -2, 2, 1, 2, 'stone');
+
+        // Obby platforms - increasingly difficult jumps
+        game.fillBox(4, 2, -1, 6, 2, 1, 'stone');
+        game.fillBox(9, 3, -1, 11, 3, 1, 'brick');
+        game.fillBox(14, 5, 0, 16, 5, 0, 'stone');
+        game.fillBox(19, 6, -1, 20, 6, 1, 'planks');
+        game.fillBox(23, 8, -1, 25, 8, 1, 'stone');
+        game.fillBox(23, 9, -1, 25, 12, -1, 'brick');
+
+        // Side path
+        game.fillBox(9, 4, 4, 11, 4, 5, 'cobblestone');
+        game.fillBox(9, 5, 8, 11, 5, 9, 'gold');
+
+        // Finish platform
+        game.fillBox(27, 10, -2, 31, 10, 2, 'gold');
+        game.fillBox(28, 11, -1, 30, 11, 1, 'gold');
+
+        // Add player
+        game.addPlayer({ type: 'first-person', x: 0, y: 4, z: 0 });
+
+        // --- Input handling ---
+        document.addEventListener('mousedown', (e) => {
+            if (!document.pointerLockElement) return;
+            if (!buildMode) return;
+
+            if (e.button === 0) {
+                game.placeBlockAtCursor(PALETTE[selectedSlot].name);
+            } else if (e.button === 2) {
+                game.removeBlockAtCursor();
+            }
+        });
+
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        document.addEventListener('keydown', (e) => {
+            const num = parseInt(e.key);
+            if (num >= 1 && num <= PALETTE.length) {
+                selectSlot(num - 1);
+                return;
+            }
+
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                buildMode = !buildMode;
+                document.getElementById('mode-text').textContent = buildMode ? 'BUILD MODE' : 'PLAY MODE';
+                document.getElementById('mode-bar').querySelector('.hint').textContent =
+                    buildMode ? 'Tab to switch | Left click place | Right click remove'
+                              : 'Tab to switch | Run & jump to test your obby!';
+            }
+        });
+
+        document.addEventListener('wheel', (e) => {
+            if (!document.pointerLockElement) return;
+            const dir = e.deltaY > 0 ? 1 : -1;
+            selectSlot((selectedSlot + dir + PALETTE.length) % PALETTE.length);
+        });
+
+        // Fall kill - respawn if player falls below y=-5
+        game.onTick(() => {
+            const pos = game.getPlayerPosition();
+            if (pos && pos.y < -5) {
+                game.respawn(0, 4, 0);
+            }
+        });
+
+        // Start immediately - click the game to enter pointer lock
+        game.start();
+    </script>
+</body>
+</html>

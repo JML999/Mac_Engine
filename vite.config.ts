@@ -16,6 +16,7 @@ export default defineConfig({
     },
     minify: 'oxc',
     sourcemap: true,
+    emptyOutDir: false, // Don't wipe dist - we have HTML and textures there
   },
   server: {
     open: '/demo.html',
