@@ -25,6 +25,8 @@ export class VoxelCraft {
   private opts: VoxelCraftOptions;
   private initPromise: Promise<void>;
   private onTickCallbacks: ((dt: number) => void)[] = [];
+  private saveKey: string | null = null;
+  private autoSaveInterval: number | null = null;
 
   score = 0;
 
@@ -202,6 +204,7 @@ export class VoxelCraft {
     const hit = this.raycast(maxDist);
     if (!hit) return false;
     const id = typeof block === 'string' ? this.registry.getId(block) : block;
+    const bt = this.registry.get(id);
     const px = hit.x + hit.nx;
     const py = hit.y + hit.ny;
     const pz = hit.z + hit.nz;
@@ -211,6 +214,10 @@ export class VoxelCraft {
     if (hit.nx !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
     if (hit.ny !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
     if (hit.nz !== 0) this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    // Add physics collider for solid blocks
+    if (bt?.solid !== false) {
+      this.physics.addBlockCollider(px, py, pz);
+    }
     return true;
   }
 
@@ -220,6 +227,8 @@ export class VoxelCraft {
     if (!hit) return false;
     this.world.setBlock(hit.x, hit.y, hit.z, 0);
     this.renderer.rebuildChunk(this.world, hit.x, hit.y, hit.z);
+    // Remove physics collider
+    this.physics.removeBlockCollider(hit.x, hit.y, hit.z);
     return true;
   }
 
@@ -238,6 +247,93 @@ export class VoxelCraft {
   getScene() { return this.renderer.scene; }
   getCamera() { return this.renderer.camera; }
   getThree() { return import('three'); }
+
+  // --- Persistence ---
+
+  // Enable auto-save: saves world to localStorage every intervalSec seconds + on page unload
+  autoSave(key = 'voxelcraft-world', intervalSec = 30): this {
+    this.saveKey = key;
+
+    // Save on interval
+    this.autoSaveInterval = window.setInterval(() => {
+      this.saveEdits();
+    }, intervalSec * 1000);
+
+    // Save on page close
+    window.addEventListener('beforeunload', () => {
+      this.saveEdits();
+    });
+
+    return this;
+  }
+
+  // Save current world to localStorage
+  save(key?: string): boolean {
+    const k = key ?? this.saveKey ?? 'voxelcraft-world';
+    try {
+      const data = this.world.serialize();
+      localStorage.setItem(k, JSON.stringify(data));
+      console.log('VoxelCraft: World saved');
+      return true;
+    } catch (e) {
+      console.warn('VoxelCraft: Save failed', e);
+      return false;
+    }
+  }
+
+  // Load world from localStorage (replaces current world entirely)
+  load(key?: string): boolean {
+    const k = key ?? this.saveKey ?? 'voxelcraft-world';
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      this.world.deserialize(data);
+      console.log('VoxelCraft: World loaded from save');
+      return true;
+    } catch (e) {
+      console.warn('VoxelCraft: Load failed', e);
+      return false;
+    }
+  }
+
+  // Load saved blocks on top of the base world (code-defined world + player edits)
+  loadEdits(key?: string): boolean {
+    const k = (key ?? this.saveKey ?? 'voxelcraft-world') + '-edits';
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      this.world.merge(data);
+      console.log('VoxelCraft: Player edits loaded');
+      return true;
+    } catch (e) {
+      console.warn('VoxelCraft: Load edits failed', e);
+      return false;
+    }
+  }
+
+  // Save only the diff between current world and what code defined
+  // This way code changes (new lava, NPCs) still apply, but player-placed blocks persist
+  saveEdits(key?: string): boolean {
+    const k = (key ?? this.saveKey ?? 'voxelcraft-world') + '-edits';
+    try {
+      const data = this.world.serialize();
+      localStorage.setItem(k, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      console.warn('VoxelCraft: Save edits failed', e);
+      return false;
+    }
+  }
+
+  // Clear saved data
+  clearSave(key?: string): void {
+    const k = key ?? this.saveKey ?? 'voxelcraft-world';
+    localStorage.removeItem(k);
+    localStorage.removeItem(k + '-edits');
+    console.log('VoxelCraft: Save cleared');
+  }
 
   // Debug helper
   _debugGetAtlas() { return this.registry.atlas; }

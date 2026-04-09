@@ -4,6 +4,8 @@ import { VoxelWorld, CHUNK_SIZE } from './World';
 export class PhysicsEngine {
   world!: RAPIER.World;
   private initialized = false;
+  // Track block colliders by position key for add/remove
+  private blockBodies: Map<string, RAPIER.RigidBody> = new Map();
 
   async init(): Promise<void> {
     await RAPIER.init();
@@ -79,6 +81,26 @@ export class PhysicsEngine {
     );
     const hit = this.world.castRay(ray, 0.2, true);
     return hit !== null;
+  }
+
+  addBlockCollider(x: number, y: number, z: number): void {
+    const key = `${x},${y},${z}`;
+    if (this.blockBodies.has(key)) return;
+    const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(x + 0.5, y + 0.5, z + 0.5);
+    const body = this.world.createRigidBody(bodyDesc);
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
+    this.world.createCollider(colliderDesc, body);
+    this.blockBodies.set(key, body);
+  }
+
+  removeBlockCollider(x: number, y: number, z: number): void {
+    const key = `${x},${y},${z}`;
+    const body = this.blockBodies.get(key);
+    if (body) {
+      this.world.removeRigidBody(body);
+      this.blockBodies.delete(key);
+    }
   }
 
   getRapier(): typeof RAPIER {

@@ -134,7 +134,7 @@
         const VC = VoxelCraft.VoxelCraft || VoxelCraft;
         const game = new VC('#game');
 
-        // Starter obby layout
+        // === BASE WORLD (defined by code - always rebuilds) ===
         game.flatWorld(50, 'grass', 3);
 
         // Starting platform
@@ -155,6 +155,12 @@
         // Finish platform
         game.fillBox(27, 10, -2, 31, 10, 2, 'gold');
         game.fillBox(28, 11, -1, 30, 11, 1, 'gold');
+
+        // === LOAD PLAYER EDITS on top of base world ===
+        game.loadEdits('obby-save');
+
+        // === AUTO-SAVE player edits every 15 seconds + on page close ===
+        game.autoSave('obby-save', 15);
 
         // Add player
         game.addPlayer({ type: 'first-person', x: 0, y: 4, z: 0 });
@@ -187,6 +193,12 @@
                 document.getElementById('mode-bar').querySelector('.hint').textContent =
                     buildMode ? 'Tab to switch | Left click place | Right click remove'
                               : 'Tab to switch | Run & jump to test your obby!';
+            }
+
+            // Ctrl+Shift+X = clear save and reload
+            if (e.key === 'X' && e.ctrlKey && e.shiftKey) {
+                game.clearSave('obby-save');
+                location.reload();
             }
         });
 

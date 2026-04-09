@@ -73,6 +73,39 @@ export class VoxelWorld {
     return this.chunks.get(this.chunkKey(cx, cy, cz));
   }
 
+  // Serialize all chunks to a JSON-safe object
+  serialize(): Record<string, number[]> {
+    const data: Record<string, number[]> = {};
+    for (const [key, chunk] of this.chunks.entries()) {
+      data[key] = Array.from(chunk);
+    }
+    return data;
+  }
+
+  // Load chunks from serialized data (replaces current world)
+  deserialize(data: Record<string, number[]>): void {
+    this.chunks.clear();
+    for (const [key, arr] of Object.entries(data)) {
+      this.chunks.set(key, new Uint8Array(arr));
+    }
+  }
+
+  // Merge saved data on top of current world (saved blocks override base world)
+  merge(data: Record<string, number[]>): void {
+    for (const [key, arr] of Object.entries(data)) {
+      const saved = new Uint8Array(arr);
+      const existing = this.chunks.get(key);
+      if (existing) {
+        // Overwrite only non-zero blocks from save, but also apply zeros (removed blocks)
+        for (let i = 0; i < saved.length; i++) {
+          existing[i] = saved[i];
+        }
+      } else {
+        this.chunks.set(key, saved);
+      }
+    }
+  }
+
   generateFlat(sizeX: number, sizeZ: number, groundBlock: string | number = 'grass', depth = 3): void {
     const blockId = typeof groundBlock === 'string'
       ? this.registry.getId(groundBlock)
