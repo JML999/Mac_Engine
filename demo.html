@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>VoxelCraft Demo</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+        #game { width: 100%; height: 100%; }
+        #ui {
+            position: absolute; top: 15px; left: 15px;
+            color: white; font-family: 'Courier New', monospace;
+            pointer-events: none; text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px; height: 20px;
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: rgba(255,255,255,0.6);
+        }
+        #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+        #crosshair::after { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    <div id="crosshair"></div>
+    <div id="ui">
+        <h2>VOXELCRAFT ENGINE</h2>
+        <p>Click to start | WASD to move | Space to jump | Mouse to look</p>
+    </div>
+
+    <script type="module">
+        import { VoxelCraft } from './src/index.ts';
+
+        const game = new VoxelCraft('#game');
+
+        // Create a flat world
+        game.flatWorld(40, 'grass', 4);
+
+        // Add some structures
+        game.wall(5, 1, -5, 8, 4, 'brick');
+        game.wall(5, 1, -2, 1, 4, 'brick');
+        game.wall(12, 1, -2, 1, 4, 'brick');
+        game.fillBox(5, 4, -5, 12, 4, -2, 'planks');
+
+        // Scattered blocks
+        game.placeBlock(-3, 1, -3, 'stone');
+        game.placeBlock(-3, 2, -3, 'stone');
+        game.placeBlock(-3, 3, -3, 'gold');
+
+        // Stairs
+        game.stairs(8, 1, 2, 5, 'cobblestone');
+
+        // A pond
+        game.fillBox(-8, 0, -8, -4, 0, -4, 'water');
+
+        // Trees (simple)
+        for (const [tx, tz] of [[6, 8], [-5, 6], [10, -10], [-8, 3]]) {
+            // Trunk
+            game.fillBox(tx, 1, tz, tx, 4, tz, 'wood');
+            // Canopy
+            game.fillBox(tx - 2, 4, tz - 2, tx + 2, 6, tz + 2, 'leaves');
+            game.fillBox(tx - 1, 7, tz - 1, tx + 1, 7, tz + 1, 'leaves');
+        }
+
+        // Snow peaks in the distance
+        game.fillBox(-18, 1, -18, -15, 6, -15, 'snow');
+        game.fillBox(-17, 7, -17, -16, 8, -16, 'snow');
+
+        // Add the player
+        game.addPlayer({ type: 'first-person', x: 0, y: 5, z: 10 });
+
+        // Start the engine
+        game.start();
+    </script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+import { BlockRegistry } from './engine/BlockRegistry';
+import { VoxelWorld } from './engine/World';
+import { VoxelRenderer } from './engine/Renderer';
+import { PhysicsEngine } from './engine/Physics';
+import { PlayerController, PlayerOptions } from './engine/PlayerController';
+
+export interface VoxelCraftOptions {
+  fov?: number;
+  gravity?: number;
+  skyColor?: string;
+  fogNear?: number;
+  fogFar?: number;
+}
+
+export class VoxelCraft {
+  private container: HTMLElement;
+  private renderer!: VoxelRenderer;
+  private physics!: PhysicsEngine;
+  private world!: VoxelWorld;
+  private registry!: BlockRegistry;
+  private player: PlayerController | null = null;
+  private running = false;
+  private opts: VoxelCraftOptions;
+  private initPromise: Promise<void>;
+  private onTickCallbacks: ((dt: number) => void)[] = [];
+
+  score = 0;
+
+  constructor(selector: string, opts: VoxelCraftOptions = {}) {
+    const el = document.querySelector(selector);
+    if (!el) throw new Error(`VoxelCraft: element "${selector}" not found`);
+    this.container = el as HTMLElement;
+    this.container.style.position = 'relative';
+    this.container.style.overflow = 'hidden';
+    this.opts = opts;
+
+    this.registry = new BlockRegistry();
+    this.world = new VoxelWorld(this.registry);
+    this.physics = new PhysicsEngine();
+    this.initPromise = this.init();
+  }
+
+  private async init(): Promise<void> {
+    await this.physics.init();
+    this.renderer = new VoxelRenderer(this.container);
+
+    if (this.opts.fov) {
+      this.renderer.camera.fov = this.opts.fov;
+      this.renderer.camera.updateProjectionMatrix();
+    }
+    if (this.opts.skyColor) {
+      const c = new (await import('three')).Color(this.opts.skyColor);
+      this.renderer.scene.background = c;
+    }
+  }
+
+  // --- World building ---
+
+  flatWorld(size: number, block: string | number = 'grass', depth = 3): this {
+    this.world.generateFlat(size, size, block, depth);
+    return this;
+  }
+
+  placeBlock(x: number, y: number, z: number, block: string | number): this {
+    const id = typeof block === 'string' ? this.registry.getId(block) : block;
+    this.world.setBlock(x, y, z, id);
+    return this;
+  }
+
+  removeBlock(x: number, y: number, z: number): this {
+    this.world.setBlock(x, y, z, 0);
+    return this;
+  }
+
+  fillBox(
+    x1: number, y1: number, z1: number,
+    x2: number, y2: number, z2: number,
+    block: string | number
+  ): this {
+    const id = typeof block === 'string' ? this.registry.getId(block) : block;
+    const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+    const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+    const minZ = Math.min(z1, z2), maxZ = Math.max(z1, z2);
+    for (let x = minX; x <= maxX; x++)
+      for (let y = minY; y <= maxY; y++)
+        for (let z = minZ; z <= maxZ; z++)
+          this.world.setBlock(x, y, z, id);
+    return this;
+  }
+
+  wall(x: number, y: number, z: number, width: number, height: number, block: string | number): this {
+    return this.fillBox(x, y, z, x + width - 1, y + height - 1, z, block);
+  }
+
+  stairs(x: number, y: number, z: number, count: number, block: string | number): this {
+    for (let i = 0; i < count; i++) {
+      this.placeBlock(x, y + i, z + i, block);
+    }
+    return this;
+  }
+
+  // --- Block types ---
+
+  addBlockType(name: string, color: string | [number, number, number]): number {
+    let rgb: [number, number, number];
+    if (typeof color === 'string') {
+      const c = parseInt(color.replace('#', ''), 16);
+      rgb = [(c >> 16) / 255, ((c >> 8) & 0xff) / 255, (c & 0xff) / 255];
+    } else {
+      rgb = color;
+    }
+    return this.registry.addCustom(name, rgb);
+  }
+
+  // --- Player ---
+
+  addPlayer(opts: PlayerOptions & { x?: number; y?: number; z?: number } = {}): this {
+    const spawnX = opts.x ?? 0;
+    const spawnY = opts.y ?? 5;
+    const spawnZ = opts.z ?? 5;
+
+    this.initPromise.then(() => {
+      const body = this.physics.createPlayerBody(spawnX, spawnY, spawnZ);
+      this.player = new PlayerController(
+        body,
+        this.physics,
+        this.renderer.camera,
+        this.renderer.getCanvas(),
+        opts
+      );
+    });
+    return this;
+  }
+
+  // --- Game loop ---
+
+  onTick(callback: (dt: number) => void): this {
+    this.onTickCallbacks.push(callback);
+    return this;
+  }
+
+  async start(): Promise<void> {
+    await this.initPromise;
+
+    // Build texture atlas from all registered block types
+    try {
+      const atlas = await this.registry.buildAtlas();
+      this.renderer.setAtlas(atlas);
+      console.log('VoxelCraft: Texture atlas built successfully');
+    } catch (e) {
+      console.warn('VoxelCraft: Atlas build failed, using flat colors', e);
+    }
+
+    this.renderer.buildWorldMesh(this.world);
+    console.log('VoxelCraft: World mesh built, chunks:', this.world.getChunkKeys().length);
+    this.physics.createGroundColliders(this.world);
+    this.running = true;
+
+    let lastTime = performance.now();
+    const loop = (time: number) => {
+      if (!this.running) return;
+      const dt = Math.min((time - lastTime) / 1000, 0.05); // Cap at 50ms
+      lastTime = time;
+
+      this.physics.step(1 / 60);
+
+      if (this.player) {
+        this.player.update();
+      }
+
+      for (const cb of this.onTickCallbacks) {
+        cb(dt);
+      }
+
+      this.renderer.render();
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  // --- Accessors ---
+
+  getPlayerPosition(): { x: number; y: number; z: number } | null {
+    return this.player?.getPosition() ?? null;
+  }
+
+  getScene() { return this.renderer.scene; }
+  getCamera() { return this.renderer.camera; }
+  getThree() { return import('three'); }
+
+  // Debug helper
+  _debugGetAtlas() { return this.registry.atlas; }
+}

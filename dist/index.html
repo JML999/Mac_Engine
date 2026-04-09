@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>VoxelCraft Demo</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+        #game { width: 100%; height: 100%; }
+        #ui {
+            position: absolute; top: 15px; left: 15px;
+            color: white; font-family: 'Courier New', monospace;
+            pointer-events: none; text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.5); font-size: 24px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    <div id="crosshair">+</div>
+    <div id="ui">
+        <h2>VOXELCRAFT</h2>
+        <p>Click to play | WASD move | Shift run | Space jump</p>
+    </div>
+
+    <script src="voxelcraft.iife.js"></script>
+    <script>
+        const game = new VoxelCraft('#game');
+
+        // Flat grass world
+        game.flatWorld(40, 'grass', 4);
+
+        // House
+        game.fillBox(-3, 1, -5, 3, 4, -5, 'brick');
+        game.fillBox(-3, 1, 0, 3, 4, 0, 'brick');
+        game.fillBox(-3, 1, -5, -3, 4, 0, 'brick');
+        game.fillBox(3, 1, -5, 3, 4, 0, 'brick');
+        game.fillBox(-3, 5, -5, 3, 5, 0, 'planks');
+        game.removeBlock(0, 1, 0);
+        game.removeBlock(0, 2, 0);
+        game.removeBlock(0, 3, 0);
+
+        // Tower
+        game.placeBlock(-3, 1, -3, 'stone');
+        game.placeBlock(-3, 2, -3, 'stone');
+        game.placeBlock(-3, 3, -3, 'gold');
+
+        // Stairs
+        game.stairs(8, 1, 2, 5, 'cobblestone');
+
+        // Trees
+        for (const [tx, tz] of [[6, 8], [-5, 6], [10, -10], [-8, 3]]) {
+            game.fillBox(tx, 1, tz, tx, 4, tz, 'wood');
+            game.fillBox(tx - 2, 4, tz - 2, tx + 2, 6, tz + 2, 'leaves');
+            game.fillBox(tx - 1, 7, tz - 1, tx + 1, 7, tz + 1, 'leaves');
+        }
+
+        // Snow hill
+        game.fillBox(-18, 1, -18, -15, 6, -15, 'snow');
+        game.fillBox(-17, 7, -17, -16, 8, -16, 'snow');
+
+        // Sand area
+        game.fillBox(12, 0, 12, 18, 0, 18, 'sand');
+
+        // Player
+        game.addPlayer({ type: 'first-person', x: 0, y: 5, z: 10 });
+
+        game.start();
+    </script>
+</body>
+</html>
