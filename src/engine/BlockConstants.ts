@@ -30,11 +30,11 @@ export const FACE_SHADE_BOTTOM = 0.5;
 // AO intensity curve: [0 neighbors, 1 neighbor, 2 neighbors, 3 neighbors]
 // Hytopia's values are [0, 0.5, 0.7, 0.9] but those are subtracted from the color
 // before multiplication. For our (1 - ao) multiplier approach, use softer values.
-export const DEFAULT_BLOCK_AO_INTENSITY: Vector4Tuple = [0, 0.15, 0.3, 0.45];
+export const DEFAULT_BLOCK_AO_INTENSITY: Vector4Tuple = [0, 0.08, 0.18, 0.30];
 
 // Sky light configuration
 export const SKY_LIGHT_MAX_DISTANCE = 16;
-export const SKY_LIGHT_MIN_BRIGHTNESS = 0.3;
+export const SKY_LIGHT_MIN_BRIGHTNESS = 0.5;
 
 export const SKY_LIGHT_BRIGHTNESS_LUT = Array.from({ length: SKY_LIGHT_MAX_DISTANCE + 1 }, (_, dy) =>
   dy === 0 ? 0 : SKY_LIGHT_MIN_BRIGHTNESS + (1 - SKY_LIGHT_MIN_BRIGHTNESS) * (dy - 1) / (SKY_LIGHT_MAX_DISTANCE - 1)
@@ -113,9 +113,30 @@ export const BLOCK_FACE_GEOMETRIES: Record<BlockFace, BlockFaceGeometry> = {
 
 export const ALL_FACES: BlockFace[] = ['left', 'right', 'top', 'bottom', 'front', 'back'];
 
-// Face shade lookup by normal direction
+// Hytopia-style lighting: bright, cheerful, subtle directional variation
+// Sun from upper-right-front (normalized 50,80,30)
+const SUN_DIR: Vector3Tuple = [0.48, 0.77, 0.29];
+
 export function getFaceShade(normal: Vector3Tuple): number {
-  if (normal[1] > 0.5) return FACE_SHADE_TOP;
-  if (normal[1] < -0.5) return FACE_SHADE_BOTTOM;
-  return FACE_SHADE_SIDE;
+  // Hytopia base: top=1.0, side=0.8, bottom=0.5
+  let base: number;
+  if (normal[1] > 0.5) base = FACE_SHADE_TOP;
+  else if (normal[1] < -0.5) base = FACE_SHADE_BOTTOM;
+  else base = FACE_SHADE_SIDE;
+
+  // Subtle sun variation on side faces only (top/bottom stay as-is)
+  if (Math.abs(normal[1]) < 0.5) {
+    const dot = normal[0] * SUN_DIR[0] + normal[2] * SUN_DIR[2];
+    // Sun-facing sides get +0.1 brightness, shadow sides get -0.05
+    base += dot * 0.08;
+  }
+
+  return Math.max(0.45, base); // Never darker than 0.45
+}
+
+// Minimal sun tint - just a tiny warm/cool shift
+export function getSunTint(normal: Vector3Tuple): Vector3Tuple {
+  const dot = normal[0] * SUN_DIR[0] + normal[1] * SUN_DIR[1] + normal[2] * SUN_DIR[2];
+  const t = dot * 0.03; // Very subtle
+  return [1.0 + t, 1.0 + t * 0.5, 1.0 - t * 0.5];
 }

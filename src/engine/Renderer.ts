@@ -48,9 +48,9 @@ export class VoxelRenderer {
 
     this.scene = new THREE.Scene();
 
-    // Sky blue background matching Hytopia's aesthetic
-    this.scene.background = new THREE.Color(0.55, 0.78, 1.0);
-    this.scene.fog = new THREE.Fog(0x8cc7ff, 80, 220);
+    // Sky background - warm blue to match sun-lit scene
+    this.scene.background = new THREE.Color(0.53, 0.76, 0.98);
+    this.scene.fog = new THREE.Fog(new THREE.Color(0.65, 0.82, 0.98), 60, 180);
 
     const w = container.clientWidth;
     const h = container.clientHeight;

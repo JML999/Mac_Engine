@@ -4,7 +4,7 @@ import { VoxelWorld, CHUNK_SIZE } from './World';
 import { TextureAtlas } from './TextureAtlas';
 import {
   BLOCK_FACE_GEOMETRIES, ALL_FACES, BlockFace,
-  DEFAULT_BLOCK_AO_INTENSITY, getFaceShade,
+  DEFAULT_BLOCK_AO_INTENSITY, getFaceShade, getSunTint,
   SKY_LIGHT_BRIGHTNESS_LUT, SKY_LIGHT_MAX_DISTANCE,
 } from './BlockConstants';
 
@@ -82,6 +82,7 @@ export function buildChunkMesh(
           }
 
           const faceShade = getFaceShade(faceGeo.normal);
+          const sunTint = getSunTint(faceGeo.normal);
           const vertexBase = positions.length / 3;
 
           // Get block color for this face (white when using textures, tinted when not)
@@ -115,13 +116,12 @@ export function buildChunkMesh(
               uvs.push(vert.uv[0], vert.uv[1]);
             }
 
-            // Vertex color = baseColor * (1 - aoIntensity) * faceShade * skyLight
-            // AO intensity [0, 0.5, 0.7, 0.9] = how much to darken at 0,1,2,3 solid neighbors
+            // Vertex color = baseColor * (1 - ao) * faceShade * skyLight * sunTint
             const ao = calculateAO(world, wx, wy, wz, vert.ao);
             const shade = (1 - ao) * faceShade * skyLight;
-            const r = baseColor[0] * shade;
-            const g = baseColor[1] * shade;
-            const b = baseColor[2] * shade;
+            const r = baseColor[0] * shade * sunTint[0];
+            const g = baseColor[1] * shade * sunTint[1];
+            const b = baseColor[2] * shade * sunTint[2];
             colors.push(r, g, b, 1.0);
           }
 
